@@ -12,7 +12,7 @@ gen_dm <- function(df,
   metric <- match.arg(metric)
 
   # pull out df with only covariates
-  covs <- df %>% select(starts_with("X"))
+  covs <- df %>% dplyr::select(dplyr::starts_with("X"))
 
   # row numbers of each tx/co unit
   tx_obs <- which(as.logical(df$Z))
@@ -32,12 +32,15 @@ gen_dm <- function(df,
   #      for V = scaling
   #   - this means that euclidean distance has a (V^T V) scale!
   covs <- covs %>%
-    mutate(across(!where(is.numeric), ~as.numeric(as.factor(.)))) %>%
+    dplyr::mutate(dplyr::across(!dplyr::where(is.numeric),
+                                ~as.numeric(as.factor(.)))) %>%
     as.matrix() %*%
     diag(scaling)
 
   # compute (#tx) x (#co) distance matrix
   # TODO: any way to make this faster?
+  browser()
+  # try: dist, rdist, Rfast::Dist
   dm <- flexclust::dist2(matrix(covs[tx_obs,], ncol = ncol(covs)),   # in case only one tx unit
                          covs[co_obs,],
                          method = metric)
