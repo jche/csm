@@ -1,6 +1,50 @@
 
 # functions related to synthetic controls
 
+# main function: generates SC weights
+#  - d has tx unit in first row, co in remaining rows
+gen_sc_weights <- function(d, dist_scaling,
+                           metric = c("maximum", "euclidean", "manhattan")) {
+  metric <- match.arg(metric)
+
+  # edge cases
+  if (nrow(d) == 0) {
+    return(tibble())
+  } else if (nrow(d) == 2) {
+    return(d %>%
+             dplyr::mutate(
+               weights = c(1,1)))
+  }
+
+  # extreme scales can crash optimizers, so avoid optimizing them
+  # TODO: clean this up
+  exact_match_cols <- which(is.na(dist_scaling))
+  if (length(exact_match_cols) > 0) {
+    dist_scaling <- dist_scaling[-exact_match_cols]
+  }
+  d2 <- d %>%
+    dplyr::select(dplyr::starts_with("X")) %>%
+    dplyr::select(-dplyr::all_of(exact_match_cols))
+
+  if (metric == "maximum") {
+    # run linear program
+    sol <- synth_lp(X1 = as.numeric(d2[1,]),
+                    X0 = as.matrix(d2[-1,]),
+                    V  = diag(dist_scaling))
+  } else if (metric == "euclidean") {
+    # run osqp
+    #  - note: square V, since we use (V^T V) within the euclidean distance!
+    sol <- synth_qp(X1 = as.numeric(d2[1,]),
+                    X0 = as.matrix(d2[-1,]),
+                    V  = diag(dist_scaling^2))
+  } else if (metric == "manhattan") {
+    stop("Linear program for L1-distance minimization is not currently implemented.")
+  }
+
+  d %>%
+    mutate(weights = c(1, sol))
+}
+
 
 # Solve the synth QP directly (from ebenmichael/augsynth)
 synth_qp <- function(X1, X0, V) {
@@ -50,55 +94,4 @@ synth_lp <- function(X1, X0, V) {
                      const.rhs = rhs)
 
   return(sol$solution[-1])
-}
-
-
-# main function: generates SC weights
-gen_sc_weights <- function(d, dist_scaling,
-                           metric = c("maximum", "euclidean", "manhattan")) {
-  metric <- match.arg(metric)
-
-  # edge cases
-  if (nrow(d) == 0) {
-    return(tibble())
-  } else if (nrow(d) == 2) {
-    return(d %>%
-             dplyr::mutate(
-               unit = c("tx1", "c1"),
-               weights = c(1,1)))
-  }
-
-  if (metric == "maximum") {
-    # run linear program
-    sol <- synth_lp(X1 = d[1,] %>%
-                      dplyr::select(dplyr::starts_with("X")) %>%
-                      as.numeric(),
-                    X0 = d[-1,] %>%
-                      dplyr::select(dplyr::starts_with("X")) %>%
-                      as.matrix(),
-                    V  = dist_scaling %>%
-                      dplyr::select(dplyr::starts_with("X")) %>%
-                      as.numeric() %>%
-                      diag())
-  } else if (metric == "euclidean") {
-    # run osqp
-    #  - note: square V, since we use (V^T V) within the euclidean distance!
-    sol <- synth_qp(X1 = d[1,] %>%
-                      dplyr::select(dplyr::starts_with("X")) %>%
-                      as.numeric(),
-                    X0 = d[-1,] %>%
-                      dplyr::select(dplyr::starts_with("X")) %>%
-                      as.matrix(),
-                    V  = dist_scaling %>%
-                      dplyr::select(dplyr::starts_with("X")) %>%
-                      as.numeric() %>%
-                      purrr::map_dbl(~.x^2) %>%
-                      diag())
-  } else if (metric == "manhattan") {
-    stop("Linear program for L1-distance minimization is not currently implemented.")
-  }
-
-  d %>%
-    mutate(unit = c("tx1", paste0("c", 1:(n()-1))),
-           weights = c(1, sol))
 }

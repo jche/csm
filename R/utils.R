@@ -11,64 +11,42 @@ get_att_ests <- function(matched_df) {
 }
 
 
-#' aggregate scweights to tx/sc units
+#' aggregate to tx/sc units
 #'
-#' @param scweights list of sc weights (tibbles with tx unit in first row)
+#' @param wl list of tibbles with tx unit in first row, and associated weights
 #'
 #' @return df with tx and corresponding sc units
-agg_sc_units <- function(scweights) {
-  if (!is.data.frame(scweights)) {
-    scweights <- scweights %>%
-      map_dfr(~mutate(., subclass=id[1]))
+agg_sc_units <- function(wl) {
+  if (!is.data.frame(wl)) {
+    wl <- wl %>%
+      purrr::map_dfr(~mutate(., subclass=id[1]))
   }
 
-  scweights %>%
-    group_by(subclass, Z) %>%
-    summarize(across(starts_with("X"),
-                     ~sum(.x * weights)),
-              across(starts_with("Y"),
-                     ~sum(.x * weights)),
-              .groups="drop_last") %>%
-    mutate(id = c(NA, subclass[1]), .before="subclass") %>%
-    mutate(weights = 1) %>%
-    ungroup()
+  wl %>%
+    dplyr::group_by(subclass, Z) %>%
+    dplyr::summarize(dplyr::across(dplyr::starts_with("X"),
+                                   ~sum(.x * weights)),
+                     .groups="drop_last") %>%
+    dplyr::mutate(id = c(NA, subclass[1]), .before="subclass") %>%
+    dplyr::mutate(weights = 1) %>%
+    dplyr::ungroup()
 }
 
 
-#' aggregate sc weights to original tx and (weighted) co units
+#' aggregate to original tx and (weighted) co units
 #'
-#' @param scweights list of sc weights (tibbles with tx unit in first row)
+#' @param wl list of tibbles with tx unit in first row, and associated weights
 #'
 #' @return df with original tx and sc units, with weights
-agg_co_units <- function(scweights) {
-  if (!is.data.frame(scweights)) {
-    scweights <- scweights %>%
-      bind_rows()
+agg_co_units <- function(wl) {
+  if (!is.data.frame(wl)) {
+    wl <- dplyr::bind_rows(wl)
   }
 
-  scweights %>%
-    group_by(id) %>%
-    summarize(across(-contains("weights"), ~first(.)),
-              weights = sum(weights),
-              subclass = NA,
-              dist = NA)
-}
-
-
-agg_avg_units <- function(scweights) {
-  if (!is.data.frame(scweights)) {
-    scweights <- scweights %>%
-      map_dfr(~mutate(., subclass=id[1]))
-  }
-
-  scweights %>%
-    group_by(subclass, Z) %>%
-    summarize(across(starts_with("X"),
-                     ~sum(.x * 1/n())),
-              across(starts_with("Y"),
-                     ~sum(.x * 1/n()))) %>%
-    mutate(id = c(NA, subclass[1]), .before="subclass") %>%
-    mutate(weights = 1) %>%
-    ungroup()
+  wl %>%
+    dplyr::group_by(id) %>%
+    dplyr::summarize(
+      dplyr::across(-dplyr::contains("weights"), ~dplyr::first(.)),
+      weights = sum(weights))
 }
 
